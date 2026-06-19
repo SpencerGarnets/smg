@@ -39,7 +39,9 @@ use crate::{
     routers::{
         error::{self, extract_error_code_from_response},
         grpc::utils::{error_type_from_status, route_to_endpoint},
-        header_utils, RouterTrait,
+        header_utils,
+        openai::strip_default_sglang_fields,
+        RouterTrait,
     },
 };
 
@@ -483,7 +485,7 @@ impl Router {
             }
         };
 
-        let json_val = match worker.prepare_request(json_val).await {
+        let mut json_val = match worker.prepare_request(json_val).await {
             Ok(prepared) => prepared,
             Err(e) => {
                 return error::bad_request(
@@ -492,6 +494,7 @@ impl Router {
                 );
             }
         };
+        strip_default_sglang_fields(&mut json_val);
 
         let mut request_builder = self.client.post(&endpoint_url).json(&json_val);
 

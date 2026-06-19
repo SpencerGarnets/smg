@@ -42,6 +42,21 @@ fn strip_sglang_fields(payload: &mut Value) {
     }
 }
 
+pub(crate) fn strip_default_sglang_fields(payload: &mut Value) {
+    if let Some(obj) = payload.as_object_mut() {
+        for field in SGLANG_FIELDS {
+            if obj.get(*field).is_some_and(|value| {
+                value.is_null()
+                    || value == false
+                    || (matches!(*field, "separate_reasoning" | "stream_reasoning")
+                        && value == true)
+            }) {
+                obj.remove(*field);
+            }
+        }
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum ProviderError {
     #[error("Unsupported endpoint: {0:?}")]
@@ -247,5 +262,34 @@ impl ProviderRegistry {
 
     pub fn default_provider_arc(&self) -> Arc<dyn Provider> {
         Arc::clone(&self.default_provider)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::strip_default_sglang_fields;
+
+    #[test]
+    fn strip_default_sglang_fields_removes_false_and_null_values() {
+        let mut payload = json!({
+            "continue_final_message": false,
+            "messages": [],
+            "model": "test-model",
+            "no_stop_trim": true,
+            "return_hidden_states": null,
+            "separate_reasoning": true,
+            "stream_reasoning": true
+        });
+
+        strip_default_sglang_fields(&mut payload);
+
+        assert_eq!(payload.get("continue_final_message"), None);
+        assert_eq!(payload.get("return_hidden_states"), None);
+        assert_eq!(payload.get("separate_reasoning"), None);
+        assert_eq!(payload.get("stream_reasoning"), None);
+        assert_eq!(payload.get("no_stop_trim"), Some(&json!(true)));
+        assert_eq!(payload.get("model"), Some(&json!("test-model")));
     }
 }
